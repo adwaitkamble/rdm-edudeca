@@ -21,7 +21,7 @@ import { ChevronDown, Check, AlertTriangle, Search, X } from 'lucide-react-nativ
 import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import { useOAuth, useUser, useClerk } from '@clerk/expo';
+import { useOAuth, useAuth } from '@clerk/expo';
 import { userService, setCurrentUserId } from '../../services';
 
 // Ensure any existing auth sessions in WebBrowser are completed properly
@@ -55,8 +55,7 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
 
   // Initialize Clerk Google OAuth strategy
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
-  const clerk = useClerk();
-  const { user: clerkUser } = useUser();
+  const clerkAuth = useAuth();
 
   // Form State: Pre-populate with stored details if returning
   const [fullName, setFullName] = useState<string>(
@@ -149,10 +148,8 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
         await setActive({ session: sessionId });
       }
 
-      if (clerkUser) {
-        studentName = clerkUser.fullName || clerkUser.firstName || studentName;
-        studentEmail = clerkUser.primaryEmailAddress?.emailAddress || studentEmail;
-        activeUserId = clerkUser.id || sessionId || activeUserId;
+      if (clerkAuth?.userId) {
+        activeUserId = clerkAuth.userId;
       } else if (sessionId) {
         activeUserId = sessionId;
       }
