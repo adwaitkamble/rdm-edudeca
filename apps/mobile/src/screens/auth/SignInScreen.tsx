@@ -27,6 +27,16 @@ import { userService, setCurrentUserId } from '../../services';
 // Ensure any existing auth sessions in WebBrowser are completed properly
 WebBrowser.maybeCompleteAuthSession();
 
+// Warm up Android browser for smooth OAuth redirects
+const useWarmUpBrowser = () => {
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+};
+
 type SignInScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'SignIn'>;
 
 interface SignInScreenProps {
@@ -34,6 +44,8 @@ interface SignInScreenProps {
 }
 
 export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
+  useWarmUpBrowser();
+
   const storedUser = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
   const resetState = useAppStore((state) => state.resetState);
@@ -124,10 +136,8 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
     let activeUserId = storedUser.id || 'user_dev_01';
 
     try {
-      // Build proper redirect URI for Expo Go / standalone apps
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'edudeca',
-      });
+      // In Expo Go, AuthSession.makeRedirectUri() automatically produces the appropriate redirect URI
+      const redirectUrl = AuthSession.makeRedirectUri();
 
       const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow({
         redirectUrl,
@@ -139,7 +149,6 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
         await setActive({ session: sessionId });
       }
 
-      // If Clerk user is available, prioritize Google profile name and email
       if (clerkUser) {
         studentName = clerkUser.fullName || clerkUser.firstName || studentName;
         studentEmail = clerkUser.primaryEmailAddress?.emailAddress || studentEmail;
@@ -149,7 +158,9 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
       }
 
       setCurrentUserId(activeUserId);
-
+    } catch (err: any) {
+      console.log('[Clerk Google SSO] Notice / Development Fallback:', err?.message || err);
+    } finally {
       const profileData = {
         name: studentName,
         email: studentEmail,
@@ -166,11 +177,11 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
         quizzesCompleted: storedUser.quizzesCompleted || 0,
       };
 
-      // Save locally to Zustand
+      // 1. Immediately authenticate and save to local Zustand store
       setUser(profileData);
       loginDevOrGuest(profileData);
 
-      // Save into MongoDB backend database
+      // 2. Persist to MongoDB backend in background
       try {
         const dbUser = await userService.updateUserProfile(profileData, activeUserId);
         if (dbUser) {
@@ -179,38 +190,7 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
       } catch (_syncErr) {
         // Non-blocking sync notice
       }
-    } catch (err: any) {
-      console.log('[Clerk OAuth] Sign-in notice/fallback:', err?.message || err);
 
-      // Graceful fallback for offline/development mode
-      const profileData = {
-        name: studentName,
-        email: studentEmail,
-        classGrade: gradeLabel,
-        scienceStream: isScienceStream,
-        institution: institution.trim(),
-        state: selectedState,
-        city: selectedCity,
-        level4Consent,
-        selectedTrack: selectedTrack || 'A',
-        level: storedUser.level || 0,
-        streak: storedUser.streak || 0,
-        rdmBalance: storedUser.rdmBalance || 0,
-        quizzesCompleted: storedUser.quizzesCompleted || 0,
-      };
-
-      setUser(profileData);
-      loginDevOrGuest(profileData);
-
-      try {
-        const dbUser = await userService.updateUserProfile(profileData, activeUserId);
-        if (dbUser) {
-          setUserProfile(dbUser);
-        }
-      } catch (_err) {
-        // Ignored
-      }
-    } finally {
       setIsSubmitting(false);
     }
   };
