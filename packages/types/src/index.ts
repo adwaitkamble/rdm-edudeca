@@ -90,6 +90,9 @@ export interface LeaderboardEntry {
   rawTime?: number;
   color: string;
   institution?: string;
+  rdmBalance?: number;
+  level?: number;
+  isCurrentUser?: boolean;
 }
 
 export interface LevelNode {

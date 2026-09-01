@@ -9,13 +9,15 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DashboardStackParamList } from '../../navigation/types';
 import { colors, typography, borderRadius, spacing, Card } from '@edudeca/ui';
 import { LEADERBOARD_DATA } from '../../utils/mockData';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Sparkles, Trophy, Globe } from 'lucide-react-native';
 import { LeaderboardEntry } from '@edudeca/types';
 import { leaderboardService } from '../../services';
+import { useAppStore } from '../../store/useAppStore';
 
 type LeaderboardScreenNavigationProp = NativeStackNavigationProp<
   DashboardStackParamList,
@@ -26,23 +28,31 @@ interface LeaderboardScreenProps {
   navigation?: any;
 }
 
-const RANK_ICONS = ['👑', '🏆', '🥉'];
+const RANK_ICONS = ['👑', '🥈', '🥉'];
 
 export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ navigation }) => {
+  const user = useAppStore((state) => state.user);
+  const [viewMode, setViewMode] = useState<'level' | 'national'>('level');
   const [selectedLevel, setSelectedLevel] = useState<number>(1);
   const [rankings, setRankings] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  const fetchRankings = useCallback(async (level: number) => {
+  const fetchRankings = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await leaderboardService.fetchLeaderboardByLevel(level);
+      let data: LeaderboardEntry[] = [];
+      if (viewMode === 'level') {
+        data = await leaderboardService.fetchLeaderboardByLevel(selectedLevel, 50, user?.id);
+      } else {
+        data = await leaderboardService.fetchGlobalLeaderboard(50, user?.id);
+      }
+
       if (data && data.length > 0) {
         setRankings(data);
       } else {
-        // Fallback to sample data for preview if database has no live attempts yet for this level
-        const sampleRows = (LEADERBOARD_DATA[level] || []).map((row, idx) => ({
+        // Fallback sample data if backend is starting up
+        const sampleRows = (LEADERBOARD_DATA[selectedLevel] || []).map((row, idx) => ({
           rank: idx + 1,
           userId: `user_sample_${idx}`,
           name: row.name,
@@ -52,12 +62,13 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ navigation
           rawTime: 30,
           color: row.color || colors.teal,
           institution: 'Top Whiz Institute',
+          isCurrentUser: idx === 3,
         }));
         setRankings(sampleRows);
       }
     } catch (_err) {
       // Offline fallback: load mock data
-      const sampleRows = (LEADERBOARD_DATA[level] || []).map((row, idx) => ({
+      const sampleRows = (LEADERBOARD_DATA[selectedLevel] || []).map((row, idx) => ({
         rank: idx + 1,
         userId: `user_sample_${idx}`,
         name: row.name,
@@ -67,22 +78,29 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ navigation
         rawTime: 30,
         color: row.color || colors.teal,
         institution: 'Top Whiz Institute',
+        isCurrentUser: false,
       }));
       setRankings(sampleRows);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [viewMode, selectedLevel, user?.id]);
 
-  useEffect(() => {
-    fetchRankings(selectedLevel);
-  }, [selectedLevel, fetchRankings]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRankings();
+    }, [fetchRankings])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchRankings(selectedLevel);
+    fetchRankings();
   };
+
+  const myEntry = rankings.find(
+    (r) => r.isCurrentUser || (user?.id && r.userId === user.id) || (user?.name && r.name === user.name)
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -107,91 +125,159 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ navigation
           >
             <ArrowLeft size={16} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>🏆 Leaderboard</Text>
+          <Text style={styles.headerTitle}>🏆 Live Leaderboard</Text>
         </View>
 
         <Text style={styles.headerSub}>
-          Top scorers per level, ranked by score then fastest completion time.
+          Real-time national rankings updated live with every quiz played.
         </Text>
 
-        {/* Level Horizontal Scrollable Tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsScroll}
-        >
-          {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => {
-            const isActive = lvl === selectedLevel;
-            return (
-              <TouchableOpacity
-                key={lvl}
-                activeOpacity={0.8}
-                style={[styles.lvlTab, isActive && styles.lvlTabActive]}
-                onPress={() => setSelectedLevel(lvl)}
-              >
-                <Text
-                  style={[
-                    styles.lvlTabText,
-                    isActive && styles.lvlTabTextActive,
-                  ]}
+        {/* View Mode Toggle: Level vs National Standings */}
+        <View style={styles.modeToggleRow}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.modeBtn, viewMode === 'level' && styles.modeBtnActive]}
+            onPress={() => setViewMode('level')}
+          >
+            <Trophy size={13} color={viewMode === 'level' ? '#04140E' : colors.muted} />
+            <Text style={[styles.modeBtnText, viewMode === 'level' && styles.modeBtnTextActive]}>
+              Level Challenge
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.modeBtn, viewMode === 'national' && styles.modeBtnActive]}
+            onPress={() => setViewMode('national')}
+          >
+            <Globe size={13} color={viewMode === 'national' ? '#04140E' : colors.muted} />
+            <Text style={[styles.modeBtnText, viewMode === 'national' && styles.modeBtnTextActive]}>
+              National Standings
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Level Horizontal Scrollable Tabs (Only in Level mode) */}
+        {viewMode === 'level' ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsScroll}
+          >
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((lvl) => {
+              const isActive = lvl === selectedLevel;
+              return (
+                <TouchableOpacity
+                  key={lvl}
+                  activeOpacity={0.8}
+                  style={[styles.lvlTab, isActive && styles.lvlTabActive]}
+                  onPress={() => setSelectedLevel(lvl)}
                 >
-                  L{lvl}
+                  <Text
+                    style={[
+                      styles.lvlTabText,
+                      isActive && styles.lvlTabTextActive,
+                    ]}
+                  >
+                    Level {lvl}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {/* Your Standing Spotlight Card */}
+        {myEntry ? (
+          <View style={styles.mySpotlightCard}>
+            <View style={styles.mySpotlightLeft}>
+              <View style={styles.myRankBadge}>
+                <Text style={styles.myRankText}>#{myEntry.rank}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mySpotlightName}>
+                  {user?.name || myEntry.name} (You)
                 </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                <Text style={styles.mySpotlightSub} numberOfLines={1}>
+                  {user?.institution || myEntry.institution || 'Viswa Vignan'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.mySpotlightScore}>
+              <Text style={styles.mySpotlightScoreVal}>{myEntry.score}</Text>
+              <Text style={styles.mySpotlightScoreSub}>{myEntry.time}</Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* Leaderboard Card */}
         <Card style={styles.lbCard}>
           {loading && !refreshing ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="small" color={colors.teal} style={{ marginBottom: 8 }} />
-              <Text style={styles.loadingText}>Fetching live rankings for Level {selectedLevel}...</Text>
+              <Text style={styles.loadingText}>
+                Fetching live real-time rankings...
+              </Text>
             </View>
           ) : rankings.length === 0 ? (
             <Text style={styles.emptyText}>
-              No ranking records found for Level {selectedLevel}.
+              No ranking records found yet.
             </Text>
           ) : (
-            rankings.map((row, index) => (
-              <View
-                key={row.userId || index}
-                style={[
-                  styles.lbRow,
-                  index === rankings.length - 1 && { borderBottomWidth: 0 },
-                ]}
-              >
-                <Text style={styles.lbRankIcon}>
-                  {index < 3 ? RANK_ICONS[index] : `#${index + 1}`}
-                </Text>
-
+            rankings.map((row, index) => {
+              const isMe = row.isCurrentUser || (user?.id && row.userId === user.id) || (user?.name && row.name === user.name);
+              return (
                 <View
+                  key={row.userId || index}
                   style={[
-                    styles.lbAvatar,
-                    {
-                      backgroundColor:
-                        (colors as any)[row.color] || row.color || colors.teal,
-                    },
+                    styles.lbRow,
+                    isMe && styles.lbRowMe,
+                    index === rankings.length - 1 && { borderBottomWidth: 0 },
                   ]}
                 >
-                  <Text style={styles.lbAvatarText}>
-                    {row.name ? row.name.charAt(0).toUpperCase() : 'W'}
+                  <Text style={[styles.lbRankIcon, index < 3 && styles.lbRankTop]}>
+                    {index < 3 ? RANK_ICONS[index] : `#${row.rank || index + 1}`}
                   </Text>
-                </View>
 
-                <View style={styles.lbInfo}>
-                  <Text style={styles.lbName} numberOfLines={1}>
-                    {row.name}
-                  </Text>
-                  <Text style={styles.lbTime}>⏱ {row.time}</Text>
-                </View>
+                  <View
+                    style={[
+                      styles.lbAvatar,
+                      {
+                        backgroundColor:
+                          (colors as any)[row.color] || row.color || colors.teal,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.lbAvatarText}>
+                      {row.name ? row.name.charAt(0).toUpperCase() : 'W'}
+                    </Text>
+                  </View>
 
-                <View style={styles.lbScoreBadge}>
-                  <Text style={styles.lbScoreText}>{row.score}</Text>
+                  <View style={styles.lbInfo}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.lbName, isMe && styles.lbNameMe]} numberOfLines={1}>
+                        {row.name}
+                      </Text>
+                      {isMe ? (
+                        <View style={styles.youBadge}>
+                          <Text style={styles.youBadgeText}>YOU</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.lbInst} numberOfLines={1}>
+                      {row.institution || 'Top Whiz Institute'}
+                    </Text>
+                    <Text style={styles.lbTime}>⏱ {row.time}</Text>
+                  </View>
+
+                  <View style={[styles.lbScoreBadge, isMe && styles.lbScoreBadgeMe]}>
+                    <Text style={[styles.lbScoreText, isMe && styles.lbScoreTextMe]}>
+                      {row.score}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </Card>
       </ScrollView>
@@ -310,6 +396,118 @@ const styles = StyleSheet.create({
   lbInfo: {
     flex: 1,
   },
+  modeToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  modeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modeBtnActive: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  modeBtnText: {
+    fontSize: 12.5,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.muted,
+  },
+  modeBtnTextActive: {
+    color: '#04140E',
+  },
+  mySpotlightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.tealAlpha10,
+    borderWidth: 1.5,
+    borderColor: colors.tealAlpha35,
+    borderRadius: borderRadius.lg,
+    padding: 14,
+    marginBottom: 16,
+  },
+  mySpotlightLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  myRankBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myRankText: {
+    fontSize: 14,
+    fontWeight: typography.fontWeight.extrabold,
+    color: '#04140E',
+  },
+  mySpotlightName: {
+    fontSize: 13.5,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text,
+  },
+  mySpotlightSub: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 1,
+  },
+  mySpotlightScore: {
+    alignItems: 'flex-end',
+    marginLeft: 10,
+  },
+  mySpotlightScoreVal: {
+    fontSize: 14,
+    fontWeight: typography.fontWeight.extrabold,
+    color: colors.teal,
+  },
+  mySpotlightScoreSub: {
+    fontSize: 10,
+    color: colors.mutedDim,
+    marginTop: 1,
+  },
+  lbRowMe: {
+    backgroundColor: colors.tealAlpha10,
+    marginHorizontal: -spacing.base,
+    paddingHorizontal: spacing.base,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.teal,
+  },
+  lbRankTop: {
+    fontSize: 18,
+  },
+  lbNameMe: {
+    color: colors.teal,
+  },
+  youBadge: {
+    backgroundColor: colors.teal,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  youBadgeText: {
+    fontSize: 9,
+    fontWeight: typography.fontWeight.extrabold,
+    color: '#04140E',
+  },
+  lbInst: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 1,
+  },
   lbName: {
     fontSize: 13,
     fontWeight: typography.fontWeight.bold,
@@ -332,5 +530,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: typography.fontWeight.extrabold,
     color: colors.teal,
+  },
+  lbScoreBadgeMe: {
+    backgroundColor: colors.teal,
+  },
+  lbScoreTextMe: {
+    color: '#04140E',
   },
 });
