@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@edudeca/config/*": ["./packages/config/*"],
+      "@edudeca/config/tsconfig.base.json": ["./packages/config/tsconfig.base.json"],
+      "@edudeca/ui": ["./packages/ui/src/index.ts"],
+      "@edudeca/types": ["./packages/types/src/index.ts"],
+      "@/*": ["./apps/mobile/src/*"]
+    }
+  },
+  "include": [
+    "apps/**/*",
+    "packages/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "dist",
+    "**/dist"
+  ]
+}
