@@ -44,6 +44,10 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => 
   const currentLevel = useAppStore((state) => state.level);
   const targetLevel = route.params?.level || Math.max(1, currentLevel || 1);
   const setUserProfile = useAppStore((state) => state.setUserProfile);
+  const addRdm = useAppStore((state) => state.addRdm);
+  const incrementQuizzesCompleted = useAppStore((state) => state.incrementQuizzesCompleted);
+  const incrementStreak = useAppStore((state) => state.incrementStreak);
+  const incrementLevel = useAppStore((state) => state.incrementLevel);
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -151,12 +155,23 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => 
   const finishQuiz = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
     const total = Math.max(1, questions.length);
-    // score has already been updated in handlePickOption, so use score directly
     const finalScore = Math.min(total, Math.max(0, score));
     const accuracy = Math.min(100, Math.max(0, Math.round((finalScore / total) * 100)));
     const timeTaken = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
     const isPassed = accuracy >= 70;
-    const earnedRdm = finalScore * 10 + (isPassed ? 50 : 0);
+
+    // RDM calculation based on round tier:
+    // - Quick Round (10 Qs): max 50 RDM if 10/10 (3 per Q + 20 pass bonus)
+    // - Standard Round (20 Qs): max 110 RDM if 20/20 (4 per Q + 30 pass bonus)
+    // - Full Round (30 Qs): max 180 RDM if 30/30 (5 per Q + 30 pass bonus)
+    let earnedRdm = 0;
+    if (total <= 10) {
+      earnedRdm = Math.min(50, Math.round(finalScore * 3 + (isPassed ? 20 : 0)));
+    } else if (total <= 20) {
+      earnedRdm = Math.min(110, Math.round(finalScore * 4 + (isPassed ? 30 : 0)));
+    } else {
+      earnedRdm = Math.min(180, Math.round(finalScore * 5 + (isPassed ? 30 : 0)));
+    }
 
     setIsSubmitting(true);
 
@@ -179,6 +194,13 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => 
 
       if (response?.user) {
         setUserProfile(response.user);
+      } else {
+        addRdm(earnedRdm);
+        incrementQuizzesCompleted();
+        incrementStreak();
+        if (isPassed && targetLevel > currentLevel) {
+          incrementLevel();
+        }
       }
 
       navigation.navigate('Results', {
@@ -186,11 +208,18 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => 
         total,
         earnedRdm: response?.attempt?.earnedRdm ?? earnedRdm,
         accuracy: response?.attempt?.accuracy ?? accuracy,
-        leveledUp: response?.leveledUp ?? false,
-        newLevel: response?.newLevel ?? targetLevel,
+        leveledUp: response?.leveledUp ?? (isPassed && targetLevel > currentLevel),
+        newLevel: response?.newLevel ?? (isPassed ? Math.max(currentLevel, targetLevel) : currentLevel),
       });
     } catch (err: any) {
-      // Offline fallback: navigate and preserve score
+      // Direct store update fallback
+      addRdm(earnedRdm);
+      incrementQuizzesCompleted();
+      incrementStreak();
+      if (isPassed && targetLevel > currentLevel) {
+        incrementLevel();
+      }
+
       navigation.navigate('Results', {
         score: finalScore,
         total,

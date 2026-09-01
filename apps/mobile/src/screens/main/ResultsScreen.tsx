@@ -44,7 +44,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
         : Math.round((score / total) * 100)
     )
   );
-  const earnedRdm = route.params?.earnedRdm ?? (score * 10 + (accuracy >= 70 ? 50 : 0));
+  const isPassed = accuracy >= 70;
+  const fallbackRdm =
+    total <= 10
+      ? Math.min(50, Math.round(score * 3 + (isPassed ? 20 : 0)))
+      : total <= 20
+      ? Math.min(110, Math.round(score * 4 + (isPassed ? 30 : 0)))
+      : Math.min(180, Math.round(score * 5 + (isPassed ? 30 : 0)));
+
+  const earnedRdm = route.params?.earnedRdm !== undefined ? route.params.earnedRdm : fallbackRdm;
   const leveledUp = route.params?.leveledUp || false;
   const newLevel = route.params?.newLevel;
 

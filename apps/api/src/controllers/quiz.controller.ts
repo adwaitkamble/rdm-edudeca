@@ -43,11 +43,23 @@ export const submitQuiz = async (
 
     const isPassed = clientPassed !== undefined ? clientPassed : accuracy >= 70;
 
-    // Calculate RDM coin rewards: 10 RDM per correct answer + 50 bonus RDM if passed
+    // Calculate RDM coin rewards according to round length:
+    // - Quick Round (10 Qs): max 50 RDM if 10/10 (3 per Q + 20 pass bonus)
+    // - Standard Round (20 Qs): max 110 RDM if 20/20 (4 per Q + 30 pass bonus)
+    // - Full Round (30 Qs): max 180 RDM if 30/30 (5 per Q + 30 pass bonus)
+    let calculatedRdm = 0;
+    if (questionCount <= 10) {
+      calculatedRdm = Math.min(50, Math.round(score * 3 + (isPassed ? 20 : 0)));
+    } else if (questionCount <= 20) {
+      calculatedRdm = Math.min(110, Math.round(score * 4 + (isPassed ? 30 : 0)));
+    } else {
+      calculatedRdm = Math.min(180, Math.round(score * 5 + (isPassed ? 30 : 0)));
+    }
+
     const earnedRdm =
       clientEarnedRdm !== undefined
         ? clientEarnedRdm
-        : score * 10 + (isPassed ? 50 : 0);
+        : calculatedRdm;
 
     // 1. Create and persist new QuizAttempt document
     const attempt = await QuizAttemptModel.create({
