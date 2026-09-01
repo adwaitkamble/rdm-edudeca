@@ -1,8 +1,22 @@
 import { ApiResponse } from '@edudeca/types';
+import Constants from 'expo-constants';
 
-// Central API Base URL configuration
-const DEFAULT_API_URL = 'http://192.168.0.101:4000/api';
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+// Central API Base URL with dynamic fallback to current Metro Host IP
+const getDynamicApiUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const hostIp = hostUri.split(':')[0];
+    if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
+      return `http://${hostIp}:4000/api`;
+    }
+  }
+  return 'http://192.168.0.103:4000/api';
+};
+
+const API_BASE_URL = getDynamicApiUrl();
 
 type TokenGetter = () => Promise<string | null>;
 
