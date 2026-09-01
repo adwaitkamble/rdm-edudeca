@@ -225,6 +225,27 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
           Enter your details and continue with Google to join EduDeca.
         </Text>
 
+        {/* 1-Tap Direct Login for Returning Users */}
+        {storedUser.institution ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.returningCard}
+            onPress={() => {
+              loginDevOrGuest(storedUser);
+            }}
+          >
+            <View style={styles.returningLeft}>
+              <Text style={styles.returningTitle}>👋 Welcome Back, {storedUser.name || 'Champion'}!</Text>
+              <Text style={styles.returningSub} numberOfLines={1}>
+                {storedUser.classGrade} · {storedUser.institution}
+              </Text>
+            </View>
+            <View style={styles.returningBtn}>
+              <Text style={styles.returningBtnText}>Direct Login →</Text>
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {/* Field 0: Full Name */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Your Full Name</Text>
@@ -855,5 +876,41 @@ const styles = StyleSheet.create({
     color: colors.mutedDim,
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  returningCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.tealAlpha10,
+    borderWidth: 1.5,
+    borderColor: colors.tealAlpha35,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  returningLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  returningTitle: {
+    fontSize: 13.5,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.teal,
+    marginBottom: 3,
+  },
+  returningSub: {
+    fontSize: 11.5,
+    color: colors.muted,
+  },
+  returningBtn: {
+    backgroundColor: colors.teal,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  returningBtnText: {
+    fontSize: 11.5,
+    fontWeight: typography.fontWeight.bold,
+    color: '#04140E',
   },
 });

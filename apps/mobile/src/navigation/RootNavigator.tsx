@@ -55,8 +55,15 @@ const ClerkAuthNavigator: React.FC = () => {
   const isGuestOrDevAuthenticated = useAppStore(
     (state) => state.isGuestOrDevAuthenticated
   );
+  const user = useAppStore((state) => state.user);
 
-  const isAuthenticated = Boolean(isSignedIn || isGuestOrDevAuthenticated);
+  const hasCompletedProfile = Boolean(
+    user?.institution && user.institution.trim().length > 0 && user?.state && user?.city
+  );
+
+  const isAuthenticated = Boolean(
+    isSignedIn || isGuestOrDevAuthenticated || hasCompletedProfile
+  );
 
   return (
     <Stack.Navigator
@@ -78,8 +85,13 @@ const MockAuthNavigator: React.FC = () => {
   const isGuestOrDevAuthenticated = useAppStore(
     (state) => state.isGuestOrDevAuthenticated
   );
+  const user = useAppStore((state) => state.user);
 
-  const isAuthenticated = Boolean(isGuestOrDevAuthenticated);
+  const hasCompletedProfile = Boolean(
+    user?.institution && user.institution.trim().length > 0 && user?.state && user?.city
+  );
+
+  const isAuthenticated = Boolean(isGuestOrDevAuthenticated || hasCompletedProfile);
 
   return (
     <Stack.Navigator
