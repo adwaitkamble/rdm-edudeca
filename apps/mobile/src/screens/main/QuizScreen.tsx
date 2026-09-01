@@ -160,17 +160,17 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({ navigation, route }) => 
     const timeTaken = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
     const isPassed = accuracy >= 70;
 
-    // RDM calculation based on round tier:
-    // - Quick Round (10 Qs): max 50 RDM if 10/10 (3 per Q + 20 pass bonus)
-    // - Standard Round (20 Qs): max 110 RDM if 20/20 (4 per Q + 30 pass bonus)
-    // - Full Round (30 Qs): max 180 RDM if 30/30 (5 per Q + 30 pass bonus)
+    // RDM calculation strictly proportional to actual score:
+    // - Quick Round (10 Qs): 5 RDM per correct answer (up to 50 RDM for 10/10)
+    // - Standard Round (20 Qs): 5.5 RDM per correct answer (up to 110 RDM for 20/20)
+    // - Full Round (30 Qs): 6 RDM per correct answer (up to 180 RDM for 30/30)
     let earnedRdm = 0;
     if (total <= 10) {
-      earnedRdm = Math.min(50, Math.round(finalScore * 3 + (isPassed ? 20 : 0)));
+      earnedRdm = Math.min(50, finalScore * 5);
     } else if (total <= 20) {
-      earnedRdm = Math.min(110, Math.round(finalScore * 4 + (isPassed ? 30 : 0)));
+      earnedRdm = Math.min(110, Math.round(finalScore * 5.5));
     } else {
-      earnedRdm = Math.min(180, Math.round(finalScore * 5 + (isPassed ? 30 : 0)));
+      earnedRdm = Math.min(180, finalScore * 6);
     }
 
     setIsSubmitting(true);
