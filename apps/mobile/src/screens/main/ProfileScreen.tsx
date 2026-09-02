@@ -37,6 +37,7 @@ import {
   LogOut,
   X,
   Check,
+  Lock,
 } from 'lucide-react-native';
 
 type ProfileScreenNavigationProp = NativeStackNavigationProp<
@@ -281,6 +282,25 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <Card style={styles.infoCard}>
           <Text style={styles.cardSectionTitle}>Academic &amp; Registration Details</Text>
 
+          {/* Registered Email Row (Locked & Permanent) */}
+          <View style={styles.detailRow}>
+            <Mail size={16} color={colors.teal} style={styles.detailIcon} />
+            <View style={styles.detailTextWrap}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={styles.detailLabel}>Registered Email</Text>
+                <View style={styles.lockedChip}>
+                  <Lock size={9} color={colors.gold} />
+                  <Text style={styles.lockedText}>LOCKED</Text>
+                </View>
+              </View>
+              <Text style={styles.detailValue}>
+                {user.email || 'student@edudeca.in'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.detailDivider} />
+
           <View style={styles.detailRow}>
             <School size={16} color={colors.muted} style={styles.detailIcon} />
             <View style={styles.detailTextWrap}>
@@ -383,6 +403,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Registered Email (Immutable / Read-Only) */}
+              <View style={styles.lockedLabelRow}>
+                <Text style={styles.inputLabelLocked}>Registered Email</Text>
+                <View style={styles.lockedChip}>
+                  <Lock size={9} color={colors.gold} />
+                  <Text style={styles.lockedText}>PERMANENT · IMMUTABLE</Text>
+                </View>
+              </View>
+              <View style={styles.readOnlyInputBox}>
+                <Mail size={15} color={colors.teal} style={{ marginRight: 8 }} />
+                <Text style={styles.readOnlyEmailText}>
+                  {user.email || 'student@edudeca.in'}
+                </Text>
+              </View>
+
               <Text style={styles.inputLabel}>Full Name</Text>
               <TextInput
                 style={styles.modalInput}
@@ -829,5 +864,50 @@ const styles = StyleSheet.create({
   trackSub: {
     fontSize: 10,
     color: colors.mutedDim,
+  },
+  lockedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.goldAlpha12,
+    borderWidth: 1,
+    borderColor: colors.goldAlpha35,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  lockedText: {
+    fontSize: 8.5,
+    fontWeight: typography.fontWeight.extrabold,
+    color: colors.gold,
+    letterSpacing: 0.3,
+  },
+  lockedLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  inputLabelLocked: {
+    fontSize: 12,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.text,
+  },
+  readOnlyInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    opacity: 0.85,
+  },
+  readOnlyEmailText: {
+    fontSize: 13.5,
+    color: colors.muted,
+    fontWeight: typography.fontWeight.medium,
   },
 });

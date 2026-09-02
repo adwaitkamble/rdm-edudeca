@@ -81,11 +81,15 @@ export const updateProfile = async (
       user = await UserModel.create({
         _id: userId,
         name: name || 'Whiz Student',
-        email: email || `${userId}@edudeca.student`,
+        email: email ? email.trim().toLowerCase() : `${userId}@edudeca.student`,
         referralCode,
         ...updateFields,
       });
     } else {
+      // Ensure registered email is immutable once assigned
+      if (user.email && !user.email.endsWith('@edudeca.student')) {
+        delete updateFields.email;
+      }
       Object.assign(user, updateFields);
       await user.save();
     }
