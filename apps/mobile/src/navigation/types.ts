@@ -8,13 +8,14 @@ export type AuthStackParamList = {
 
 export type DashboardStackParamList = {
   Dashboard: undefined;
-  LevelSelect: undefined;
-  Quiz: { quizLength?: number };
+  Quiz: { quizLength?: number; level?: number };
   Results: {
     score: number;
     total: number;
     earnedRdm: number;
     accuracy: number;
+    leveledUp?: boolean;
+    newLevel?: number;
   };
   Refer: undefined;
   LevelPath: undefined;

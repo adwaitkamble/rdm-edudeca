@@ -23,8 +23,9 @@ const UserSchema = new Schema<IUserDocument>(
       lowercase: true,
       trim: true,
       sparse: true,
-      default: function () {
-        return `${(this as any)._id || 'student'}@edudeca.student`;
+      default: function (this: any) {
+        const id = this?._id || Math.floor(100000 + Math.random() * 900000);
+        return `student_${id}@edudeca.student`;
       },
     },
     classGrade: {

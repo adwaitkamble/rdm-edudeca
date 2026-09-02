@@ -3,7 +3,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DashboardStackParamList } from './types';
 import {
   DashboardScreen,
-  LevelSelectScreen,
   QuizScreen,
   ResultsScreen,
   ReferScreen,
@@ -28,11 +27,6 @@ export const DashboardStackNavigator: React.FC = () => {
       }}
     >
       <Stack.Screen name="Dashboard" component={DashboardScreen as React.ComponentType<any>} />
-      <Stack.Screen
-        name="LevelSelect"
-        component={LevelSelectScreen as React.ComponentType<any>}
-        options={{ animation: 'slide_from_bottom' }}
-      />
       <Stack.Screen
         name="Quiz"
         component={QuizScreen as React.ComponentType<any>}

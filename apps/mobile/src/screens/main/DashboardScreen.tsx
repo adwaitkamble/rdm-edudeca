@@ -160,11 +160,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
             </View>
           </View>
 
-          {/* Quick Action Button in Level Card */}
+          {/* Quick Action Button in Level Card - Starts 10Q challenge immediately */}
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.startLevelBtn}
-            onPress={() => navigation.navigate('LevelSelect')}
+            onPress={() =>
+              navigation.navigate('Quiz', {
+                quizLength: 10,
+                level: Math.max(1, level),
+              })
+            }
           >
             <Text style={styles.startLevelBtnText}>
               ⚡ Start Level {Math.max(1, level)} Challenge →

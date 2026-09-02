@@ -1,5 +1,4 @@
 export * from './DashboardScreen';
-export * from './LevelSelectScreen';
 export * from './QuizScreen';
 export * from './ResultsScreen';
 export * from './ReferScreen';
