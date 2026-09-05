@@ -32,6 +32,12 @@ const ReferralSchema = new Schema<IReferralDocument>(
       trim: true,
       default: '',
     },
+    memberId: {
+      type: String,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: ['pending', 'joined', 'signed_up', 'rewarded'],
@@ -78,5 +84,6 @@ const ReferralSchema = new Schema<IReferralDocument>(
 
 ReferralSchema.index({ inviterId: 1, email: 1 });
 ReferralSchema.index({ inviterId: 1, phone: 1 });
+ReferralSchema.index({ inviterId: 1, memberId: 1 });
 
 export const ReferralModel = model<IReferralDocument>('Referral', ReferralSchema);

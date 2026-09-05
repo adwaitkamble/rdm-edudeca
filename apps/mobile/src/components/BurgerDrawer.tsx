@@ -158,7 +158,7 @@ export const BurgerDrawer: React.FC<BurgerDrawerProps> = ({
               onPress={() => handleItemPress('Refer')}
             >
               <Rocket size={18} color={colors.text} strokeWidth={2.2} />
-              <Text style={styles.menuItemText}>Refer Friends</Text>
+              <Text style={styles.menuItemText}>Community & Refer</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

@@ -89,6 +89,11 @@ const UserSchema = new Schema<IUserDocument>(
       sparse: true,
       trim: true,
     },
+    joinedRoomCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   {
     timestamps: true,

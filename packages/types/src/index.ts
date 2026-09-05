@@ -76,6 +76,7 @@ export interface UserProfile {
   rdmBalance: number;
   quizzesCompleted: number;
   referralCode?: string;
+  joinedRoomCode?: string | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -166,6 +167,7 @@ export interface IReferral {
   phone?: string;
   email?: string;
   invitedContact?: string;
+  memberId?: string | null;
   status: 'pending' | 'joined' | 'signed_up' | 'rewarded';
   rewardPaid: boolean;
   rewardRdm: number;
@@ -187,4 +189,37 @@ export interface ApiResponse<T = any> {
   data?: T;
   message?: string;
   error?: string;
+}
+
+// Community Squad Room Types
+
+export interface CommunityMember {
+  userId: string;
+  name: string;
+  institution: string;
+  classGrade: string;
+  level: number;
+  rdmBalance: number;
+  joinedAt: string | Date;
+}
+
+export interface CommunityRoom {
+  hostId: string;
+  hostName: string;
+  hostInstitution: string;
+  roomCode: string;
+  members: CommunityMember[];
+  totalMembers: number;
+  collectiveRdm: number;
+}
+
+export interface JoinRoomPayload {
+  roomCode: string;
+}
+
+export interface JoinRoomResponse {
+  success: boolean;
+  room: CommunityRoom;
+  awardedRdm: number;
+  message: string;
 }
