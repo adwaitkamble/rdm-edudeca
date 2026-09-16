@@ -10,6 +10,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,23 +20,11 @@ import { INDIA_LOCATIONS } from '../../utils/mockData';
 import { useAppStore } from '../../store/useAppStore';
 import { ChevronDown, Check, AlertTriangle, Search, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
-import * as WebBrowser from 'expo-web-browser';
+import { supabase } from '../../lib/supabase';
 import * as AuthSession from 'expo-auth-session';
-import { useOAuth, useAuth } from '@clerk/expo';
-import { userService, setCurrentUserId } from '../../services';
+import * as WebBrowser from 'expo-web-browser';
 
-// Ensure any existing auth sessions in WebBrowser are completed properly
 WebBrowser.maybeCompleteAuthSession();
-
-// Warm up Android browser for smooth OAuth redirects
-const useWarmUpBrowser = () => {
-  useEffect(() => {
-    void WebBrowser.warmUpAsync();
-    return () => {
-      void WebBrowser.coolDownAsync();
-    };
-  }, []);
-};
 
 type SignInScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -44,18 +33,12 @@ interface SignInScreenProps {
 }
 
 export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
-  useWarmUpBrowser();
-
   const storedUser = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
   const resetState = useAppStore((state) => state.resetState);
   const loginDevOrGuest = useAppStore((state) => state.loginDevOrGuest);
   const selectedTrack = useAppStore((state) => state.selectedTrack);
   const setUserProfile = useAppStore((state) => state.setUserProfile);
-
-  // Initialize Clerk Google OAuth strategy
-  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
-  const clerkAuth = useAuth();
 
   // Form State: Pre-populate with stored details if returning
   const [fullName, setFullName] = useState<string>(
@@ -124,39 +107,130 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
     setShowCityModal(false);
   };
 
+  // Handle deep link redirect after Google OAuth
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      const url = event.url;
+      if (url) {
+        // Extract tokens from URL fragment (Supabase sends them as hash params)
+        const params = new URLSearchParams(url.split('#')[1] || '');
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            console.error('[Supabase Auth] Session set error:', error.message);
+          }
+        }
+      }
+    };
+
+    // Listen for deep links
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // Check if app was opened from a deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   const handleGoogleSignIn = async () => {
     if (!isValid || isSubmitting) return;
 
     setIsSubmitting(true);
 
     const gradeLabel = classGrade === 'XI' ? 'Class 11' : 'Class 12';
+    const classLevel = classGrade === 'XI' ? 11 : 12; // Integer for Supabase
     let studentName = fullName.trim() || storedUser.name || 'Whiz Student';
     let studentEmail = storedUser.email || 'student@edudeca.in';
-    let activeUserId = storedUser.id || 'user_dev_01';
 
     try {
-      // In Expo Go, AuthSession.makeRedirectUri() automatically produces the appropriate redirect URI
-      const redirectUrl = AuthSession.makeRedirectUri();
-
-      const { createdSessionId, setActive, signIn, signUp } = await startOAuthFlow({
-        redirectUrl,
+      // Generate the redirect URL for Expo
+      const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: 'edudeca',
       });
 
-      const sessionId = createdSessionId || signIn?.createdSessionId || signUp?.createdSessionId;
+      // Start Supabase Google OAuth flow
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true, // We handle the redirect ourselves
+        },
+      });
 
-      if (sessionId && setActive) {
-        await setActive({ session: sessionId });
+      if (error) {
+        throw error;
       }
 
-      if (clerkAuth?.userId) {
-        activeUserId = clerkAuth.userId;
-      } else if (sessionId) {
-        activeUserId = sessionId;
+      if (data?.url) {
+        // Open the OAuth URL in the in-app browser
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+        if (result.type === 'success' && result.url) {
+          const urlStr = result.url;
+          // Parse hash params (#access_token=...&refresh_token=...) or query params (?code=...)
+          const hashIndex = urlStr.indexOf('#');
+          const queryIndex = urlStr.indexOf('?');
+          const rawParams = hashIndex !== -1
+            ? urlStr.substring(hashIndex + 1)
+            : queryIndex !== -1
+            ? urlStr.substring(queryIndex + 1)
+            : '';
+          const params = new URLSearchParams(rawParams);
+
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const code = params.get('code');
+
+          if (accessToken && refreshToken) {
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+          } else if (code) {
+            await supabase.auth.exchangeCodeForSession(code);
+          }
+        }
       }
 
-      setCurrentUserId(activeUserId);
+      // Get session after auth flow
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+
+      if (session?.user) {
+        studentName = session.user.user_metadata?.full_name || studentName;
+        studentEmail = session.user.email || studentEmail;
+
+        // Upsert to edudeca_profiles with class_level as integer
+        const { error: upsertError } = await supabase
+          .from('edudeca_profiles')
+          .upsert(
+            {
+              id: session.user.id,
+              full_name: studentName,
+              email: studentEmail,
+              class_level: classLevel,
+              institution: institution.trim(),
+              state: selectedState,
+              city: selectedCity,
+            },
+            { onConflict: 'id' }
+          );
+
+        if (upsertError) {
+          console.log('[Supabase] Profile upsert notice:', upsertError.message);
+        }
+      }
     } catch (err: any) {
-      console.log('[Clerk Google SSO] Notice / Development Fallback:', err?.message || err);
+      console.log('[Supabase Google Auth] Notice:', err?.message || err);
     } finally {
       const profileData = {
         name: studentName,
@@ -177,16 +251,6 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
       // 1. Immediately authenticate and save to local Zustand store
       setUser(profileData);
       loginDevOrGuest(profileData);
-
-      // 2. Persist to MongoDB backend in background
-      try {
-        const dbUser = await userService.updateUserProfile(profileData, activeUserId);
-        if (dbUser) {
-          setUserProfile(dbUser);
-        }
-      } catch (_syncErr) {
-        // Non-blocking sync notice
-      }
 
       setIsSubmitting(false);
     }

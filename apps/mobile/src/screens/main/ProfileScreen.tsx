@@ -19,7 +19,7 @@ import { DashboardStackParamList } from '../../navigation/types';
 import { colors, typography, borderRadius, spacing, Button, Card } from '@edudeca/ui';
 import { useAppStore } from '../../store/useAppStore';
 import { userService } from '../../services';
-import { useAuth } from '@clerk/expo';
+import { supabase } from '../../lib/supabase';
 import {
   ArrowLeft,
   User as UserIcon,
@@ -57,13 +57,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const selectedTrack = useAppStore((state) => state.selectedTrack);
   const setSelectedTrack = useAppStore((state) => state.setSelectedTrack);
 
-  let clerkSignOut: (() => Promise<void>) | null = null;
-  try {
-    const { signOut } = useAuth();
-    clerkSignOut = signOut;
-  } catch (_e) {
-    // Local offline mode
-  }
+
 
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -162,12 +156,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          if (clerkSignOut) {
-            try {
-              await clerkSignOut();
-            } catch (_err) {
-              // Ignored
-            }
+          try {
+            await supabase.auth.signOut();
+          } catch (_err) {
+            // Ignored
           }
           resetState();
         },
