@@ -6,10 +6,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0E14"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.edudeca.mobile"
@@ -21,7 +17,8 @@
       }
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

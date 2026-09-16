@@ -6,7 +6,8 @@
  */
 import { supabase } from '../lib/supabase';
 
-const EDUDECA_API_BASE = 'https://www.edudeca.com/api';
+const EDUDECA_API_BASE =
+  process.env.EXPO_PUBLIC_EDUDECA_API_URL || 'https://edudeca.com/api';
 
 interface EdudecaApiOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';

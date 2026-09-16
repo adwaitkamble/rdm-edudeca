@@ -18,13 +18,24 @@ import { AuthStackParamList } from '../../navigation/types';
 import { colors, typography, borderRadius, spacing, Button, Pill } from '@edudeca/ui';
 import { INDIA_LOCATIONS } from '../../utils/mockData';
 import { useAppStore } from '../../store/useAppStore';
-import { ChevronDown, Check, AlertTriangle, Search, X } from 'lucide-react-native';
+import { ChevronDown, Check, AlertTriangle, Search, X, Lock } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { supabase } from '../../lib/supabase';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-
-WebBrowser.maybeCompleteAuthSession();
+// Safely load GoogleSignin in environments where the native binary is present
+let GoogleSignin: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const gModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gModule.GoogleSignin;
+  if (GoogleSignin?.configure) {
+    GoogleSignin.configure({
+      webClientId: '167530443868-kniil90rorooo9i3vu80sqmtlo3sqqi2.apps.googleusercontent.com',
+      offlineAccess: false,
+    });
+  }
+} catch (_err) {
+  // Handled gracefully in standard Expo Go
+}
 
 type SignInScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -43,6 +54,9 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
   // Form State: Pre-populate with stored details if returning
   const [fullName, setFullName] = useState<string>(
     storedUser.name && storedUser.name !== 'Whiz Student' ? storedUser.name : ''
+  );
+  const [email, setEmail] = useState<string>(
+    storedUser.email && storedUser.email !== 'student@edudeca.in' ? storedUser.email : ''
   );
   const [classGrade, setClassGrade] = useState<'XI' | 'XII'>(
     storedUser.classGrade === 'Class 12' || storedUser.classGrade === 'XII' ? 'XII' : 'XI'
@@ -107,8 +121,47 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
     setShowCityModal(false);
   };
 
-  // Handle deep link redirect after Google OAuth
+  // Handle deep link redirect after Google OAuth & sync existing Google session
   useEffect(() => {
+    // 1. Sync any existing session from Supabase on mount
+    supabase.auth.getSession().then(({ data }) => {
+      const s = data?.session;
+      if (s?.user) {
+        if (s.user.email) {
+          setEmail(s.user.email);
+        }
+        const gName = s.user.user_metadata?.full_name || s.user.user_metadata?.name;
+        if (gName && (!fullName || fullName === 'Whiz Student')) {
+          setFullName(gName);
+        }
+        setUser({
+          id: s.user.id,
+          ...(s.user.email ? { email: s.user.email } : {}),
+          ...(gName ? { name: gName } : {}),
+        });
+      }
+    });
+
+    // 2. Listen for auth state changes
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (s?.user) {
+        if (s.user.email) {
+          setEmail(s.user.email);
+        }
+        const gName = s.user.user_metadata?.full_name || s.user.user_metadata?.name;
+        if (gName && (!fullName || fullName === 'Whiz Student')) {
+          setFullName(gName);
+        }
+        setUser({
+          id: s.user.id,
+          ...(s.user.email ? { email: s.user.email } : {}),
+          ...(gName ? { name: gName } : {}),
+        });
+      }
+    });
+
     const handleDeepLink = async (event: { url: string }) => {
       const url = event.url;
       if (url) {
@@ -138,7 +191,10 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
       if (url) handleDeepLink({ url });
     });
 
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      authSubscription.unsubscribe();
+    };
   }, []);
 
   const handleGoogleSignIn = async () => {
@@ -149,65 +205,56 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
     const gradeLabel = classGrade === 'XI' ? 'Class 11' : 'Class 12';
     const classLevel = classGrade === 'XI' ? 11 : 12; // Integer for Supabase
     let studentName = fullName.trim() || storedUser.name || 'Whiz Student';
-    let studentEmail = storedUser.email || 'student@edudeca.in';
+    let studentEmail = email.trim().toLowerCase() || storedUser.email;
+    let session = null;
 
     try {
-      // Generate the redirect URL for Expo
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'edudeca',
-      });
+      // 1. Native Google popup appears (no browser / no website)
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response: any = await GoogleSignin.signIn();
 
-      // Start Supabase Google OAuth flow
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      // Extract the dynamic idToken
+      const idToken = response.data?.idToken || response.idToken;
+      if (!idToken) throw new Error('No ID token returned from Google');
+
+      // 2. Token is sent directly to Supabase
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true, // We handle the redirect ourselves
-        },
+        token: idToken,
       });
 
-      if (error) {
-        throw error;
+      if (error) throw error;
+      session = data.session;
+      console.log('Login successful! Supabase session:', data.session);
+    } catch (err: any) {
+      console.error('Google Sign-In failed:', err);
+      setIsSubmitting(false);
+
+      if (err?.code === 'SIGN_IN_CANCELLED' || err?.code === '12501') {
+        return;
       }
 
-      if (data?.url) {
-        // Open the OAuth URL in the in-app browser
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      Alert.alert(
+        'Google Sign-In',
+        err?.message?.includes('null')
+          ? 'True Native Sign-In requires an Android Development Build or APK to display the native account selector sheet without opening a browser.'
+          : err?.message || 'Native Google Sign-In failed.'
+      );
+      return;
+    }
 
-        if (result.type === 'success' && result.url) {
-          const urlStr = result.url;
-          // Parse hash params (#access_token=...&refresh_token=...) or query params (?code=...)
-          const hashIndex = urlStr.indexOf('#');
-          const queryIndex = urlStr.indexOf('?');
-          const rawParams = hashIndex !== -1
-            ? urlStr.substring(hashIndex + 1)
-            : queryIndex !== -1
-            ? urlStr.substring(queryIndex + 1)
-            : '';
-          const params = new URLSearchParams(rawParams);
-
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-          const code = params.get('code');
-
-          if (accessToken && refreshToken) {
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-          } else if (code) {
-            await supabase.auth.exchangeCodeForSession(code);
-          }
-        }
+    try {
+      // Refresh or check session
+      if (!session) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        session = sessionData.session;
       }
-
-      // Get session after auth flow
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
 
       if (session?.user) {
-        studentName = session.user.user_metadata?.full_name || studentName;
+        studentName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || studentName;
         studentEmail = session.user.email || studentEmail;
+        setEmail(studentEmail);
+        setFullName(studentName);
 
         // Upsert to edudeca_profiles with class_level as integer
         const { error: upsertError } = await supabase
@@ -230,7 +277,7 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
         }
       }
     } catch (err: any) {
-      console.log('[Supabase Google Auth] Notice:', err?.message || err);
+      console.log('[Supabase Sync Notice]:', err?.message || err);
     } finally {
       const profileData = {
         name: studentName,
@@ -318,6 +365,53 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
             placeholderTextColor={colors.mutedDim}
             autoCapitalize="words"
           />
+        </View>
+
+        {/* Field 0.5: Google Account Email (Auto-Linked from Google Sign-In) */}
+        <View style={styles.field}>
+          <View style={styles.emailHeaderRow}>
+            <Text style={styles.fieldLabel}>Google Account Email</Text>
+            <View style={styles.lockedChip}>
+              <Lock size={9} color={colors.gold} />
+              <Text style={styles.lockedText}>LOCKED TO GOOGLE</Text>
+            </View>
+          </View>
+
+          <View style={styles.lockedEmailBox}>
+            <Svg width={16} height={16} viewBox="0 0 48 48">
+              <Path
+                fill="#FFC107"
+                d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+              />
+              <Path
+                fill="#FF3D00"
+                d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+              />
+              <Path
+                fill="#4CAF50"
+                d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+              />
+              <Path
+                fill="#1976D2"
+                d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
+              />
+            </Svg>
+            <Text
+              style={[
+                styles.lockedEmailText,
+                !(email || storedUser.email) && styles.lockedEmailPlaceholder,
+              ]}
+              numberOfLines={1}
+            >
+              {email || storedUser.email || 'Will link automatically from your Google account'}
+            </Text>
+            {Boolean(email || storedUser.email) && (
+              <Check size={14} color={colors.teal} />
+            )}
+          </View>
+          <Text style={styles.fieldHint}>
+            Only the official email authenticated via Google Sign-In is registered to your EduDeca ID.
+          </Text>
         </View>
 
         {/* Field 1: Class Selection */}
@@ -937,6 +1031,57 @@ const styles = StyleSheet.create({
     color: colors.mutedDim,
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  emailHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  lockedEmailBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  lockedEmailText: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.text,
+  },
+  lockedEmailPlaceholder: {
+    color: colors.mutedDim,
+    fontStyle: 'italic',
+    fontWeight: typography.fontWeight.regular,
+  },
+  fieldHint: {
+    fontSize: 10.5,
+    color: colors.mutedDim,
+    marginTop: 5,
+    lineHeight: 14,
+  },
+  lockedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(240, 180, 41, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 180, 41, 0.35)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  lockedText: {
+    fontSize: 8.5,
+    fontWeight: typography.fontWeight.extrabold,
+    color: colors.gold,
+    letterSpacing: 0.3,
   },
   returningCard: {
     flexDirection: 'row',
