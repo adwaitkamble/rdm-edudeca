@@ -1,18 +1,20 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DashboardStackParamList } from '../../navigation/types';
-import { colors, typography, borderRadius, spacing, Card } from '@edudeca/ui';
+import { colors, typography, borderRadius, spacing, Card, Button } from '@edudeca/ui';
 import { LEVEL_PATH_DATA } from '../../utils/mockData';
 import { useAppStore } from '../../store/useAppStore';
-import { ArrowLeft, Lock } from 'lucide-react-native';
+import { edudecaApi } from '../../services/edudecaApi';
+import { ArrowLeft, Lock, Check, Award } from 'lucide-react-native';
 
 type LevelPathScreenNavigationProp = NativeStackNavigationProp<
   DashboardStackParamList,
@@ -27,8 +29,24 @@ export const LevelPathScreen: React.FC<LevelPathScreenProps> = ({ navigation }) 
   const level = useAppStore((state) => state.level);
   const rdmBalance = useAppStore((state) => state.rdmBalance);
   const streak = useAppStore((state) => state.streak);
+  const updateUserStats = useAppStore((state) => state.updateUserStats);
 
   const currentLevel = Math.max(1, level);
+
+  // Sync latest campaign_level from live website API
+  useEffect(() => {
+    edudecaApi.getProgress().then((data) => {
+      if (data?.campaign_level !== undefined) {
+        updateUserStats({
+          level: data.campaign_level,
+          streak: data.streak !== undefined ? data.streak : streak,
+          rdmBalance: data.xp !== undefined ? data.xp : rdmBalance,
+        });
+      }
+    }).catch((_err) => {
+      // Offline fallback
+    });
+  }, [updateUserStats, streak, rdmBalance]);
 
   const tierColors: Record<string, string> = {
     free: colors.teal,
@@ -40,6 +58,28 @@ export const LevelPathScreen: React.FC<LevelPathScreenProps> = ({ navigation }) 
     free: 'FREE',
     paid: '₹999',
     finals: '🏆 FINALS',
+  };
+
+  const handleNodePress = (n: number) => {
+    if (n > currentLevel) {
+      Alert.alert(
+        '🔒 Level Locked',
+        `You cannot jump ahead! You must win Level ${currentLevel} to unlock the next level tomorrow.`
+      );
+      return;
+    }
+    if (n < currentLevel) {
+      Alert.alert(
+        '✓ Level Completed',
+        `You have already completed Level ${n}. Progress on your current level: Level ${currentLevel}.`
+      );
+      return;
+    }
+    if (n <= 3) {
+      navigation.navigate('Quiz', { level: n });
+    } else {
+      navigation.navigate('Quiz', { level: 4 });
+    }
   };
 
   return (
@@ -135,7 +175,12 @@ export const LevelPathScreen: React.FC<LevelPathScreenProps> = ({ navigation }) 
               : ' — Complete';
 
             return (
-              <View key={node.n} style={styles.timelineNode}>
+              <TouchableOpacity
+                key={node.n}
+                activeOpacity={0.8}
+                onPress={() => handleNodePress(node.n)}
+                style={styles.timelineNode}
+              >
                 {/* Node Number Circle */}
                 <View
                   style={[
@@ -183,8 +228,36 @@ export const LevelPathScreen: React.FC<LevelPathScreenProps> = ({ navigation }) 
                     </View>
                   </View>
                   <Text style={styles.nodeSub}>{node.sub}</Text>
+
+                  {/* Active Level Action Button */}
+                  {isCurrent && (
+                    <View style={{ marginTop: 10 }}>
+                      {currentLevel <= 3 ? (
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          style={styles.playLevelBtn}
+                          onPress={() => navigation.navigate('Quiz', { level: currentLevel })}
+                        >
+                          <Text style={styles.playLevelBtnText}>
+                            ⚡ Start Level {currentLevel} Challenge →
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          style={styles.priorityGateBtn}
+                          onPress={() => navigation.navigate('Quiz', { level: 4 })}
+                        >
+                          <Lock size={14} color={colors.gold} />
+                          <Text style={styles.priorityGateBtnText}>
+                            Level 4 Priority-Access Gate
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -392,6 +465,41 @@ const styles = StyleSheet.create({
   },
   tierBadgeText: {
     fontSize: 9.5,
+    fontWeight: typography.fontWeight.extrabold,
+  },
+  playLevelBtn: {
+    backgroundColor: colors.teal,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.teal,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  playLevelBtnText: {
+    color: '#04140E',
+    fontSize: 12,
+    fontWeight: typography.fontWeight.extrabold,
+  },
+  priorityGateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(240,180,41,0.15)',
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: borderRadius.md,
+  },
+  priorityGateBtnText: {
+    color: colors.gold,
+    fontSize: 12,
     fontWeight: typography.fontWeight.extrabold,
   },
 });

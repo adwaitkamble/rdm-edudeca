@@ -55,29 +55,37 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const leveledUp = route.params?.leveledUp || false;
   const newLevel = route.params?.newLevel;
 
+  const passed = route.params?.passed !== undefined ? route.params.passed : accuracy >= 70;
+  const strikes = route.params?.strikes ?? Math.max(0, total - score);
+  const challengeLevel = route.params?.level ?? 1;
+
   const level = useAppStore((state) => state.level);
   const streak = useAppStore((state) => state.streak);
 
   const displayLevel = newLevel ?? level;
 
-  const emoji = accuracy >= 80 ? '🏆' : accuracy >= 70 ? '🎉' : '💪';
-  const title =
-    accuracy >= 80
-      ? 'Outstanding round!'
-      : accuracy >= 70
-      ? 'Round Passed!'
-      : 'Keep practicing!';
+  let emoji = '💪';
+  let title = 'Challenge Failed';
+  let subText = `Hit strike limit or time expired (${strikes}/3 strikes). You can try again tomorrow!`;
 
-  const subText = leveledUp
-    ? `🎉 You unlocked Level ${displayLevel}!`
-    : accuracy >= 70
-    ? `Great job! You mastered Level ${displayLevel}`
-    : `Score 70% or higher to advance to Level ${displayLevel + 1}`;
+  if (passed) {
+    emoji = accuracy >= 90 ? '🏆' : '🎉';
+    title = 'Challenge Passed!';
+    if (challengeLevel === 1) {
+      subText = '🎉 Level 1 Cleared! Level 2 unlocks tomorrow.';
+    } else if (challengeLevel === 2) {
+      subText = '🎉 Level 2 Cleared! Level 3 unlocks tomorrow.';
+    } else if (challengeLevel === 3) {
+      subText = '🏆 Free Zone Completed! Priority access to Level 4 unlocked.';
+    } else {
+      subText = `Level ${challengeLevel} cleared with only ${strikes} strike${strikes === 1 ? '' : 's'}!`;
+    }
+  }
 
   const handleShare = async (platform: 'WhatsApp' | 'Instagram') => {
     try {
       await Share.share({
-        message: `I just scored ${score}/${total} (${accuracy}% accuracy) in EduDeca and earned +${earnedRdm} RDM points! ⚡ Join me in India's Whiz360 Challenge!`,
+        message: `I just scored ${score}/${total} with ${strikes} strike(s) in EduDeca Daily Challenge! ⚡ Join me in India's Whiz360 Challenge!`,
       });
     } catch (_err) {
       Alert.alert('Share', `Sharing to ${platform}...`);
@@ -109,31 +117,41 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </Text>
         </View>
 
-        {/* 3 Result Metric Chips */}
+        {/* 4 Result Metric Chips */}
         <View style={styles.resultsStatsRow}>
           <View style={styles.rstat}>
-            <Text style={styles.rstatVal}>+{earnedRdm}</Text>
-            <Text style={styles.rstatLbl}>RDM Earned</Text>
+            <Text style={[styles.rstatVal, { color: colors.teal }]}>+{earnedRdm}</Text>
+            <Text style={styles.rstatLbl}>XP Earned</Text>
+          </View>
+          <View style={styles.rstat}>
+            <Text style={[styles.rstatVal, { color: strikes >= 3 ? colors.red : colors.gold }]}>
+              {strikes}/3
+            </Text>
+            <Text style={styles.rstatLbl}>Strikes</Text>
           </View>
           <View style={styles.rstat}>
             <Text style={styles.rstatVal}>{accuracy}%</Text>
             <Text style={styles.rstatLbl}>Accuracy</Text>
           </View>
           <View style={styles.rstat}>
-            <Text style={styles.rstatVal}>{Math.max(1, streak)}</Text>
-            <Text style={styles.rstatLbl}>Day Streak</Text>
+            <Text style={styles.rstatVal}>{Math.max(1, streak)}d</Text>
+            <Text style={styles.rstatLbl}>Streak</Text>
           </View>
         </View>
 
-        {/* Level Progression Banner if leveled up */}
-        {leveledUp && (
+        {/* Level Progression Banner if passed */}
+        {passed && (
           <Card style={styles.leveledUpCard}>
             <View style={styles.leveledUpRow}>
               <Award size={22} color={colors.gold} strokeWidth={2.4} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.leveledUpTitle}>New Level Unlocked!</Text>
+                <Text style={styles.leveledUpTitle}>
+                  {challengeLevel >= 3 ? 'Free Zone Conquered!' : 'Daily Challenge Mastered!'}
+                </Text>
                 <Text style={styles.leveledUpDesc}>
-                  You advanced to Level {displayLevel}. Keep competing to reach the Finals!
+                  {challengeLevel >= 3
+                    ? 'You finished all free rounds! Level 4 priority-access reservation has been granted.'
+                    : `Level ${challengeLevel + 1} unlocks tomorrow. Maintain your daily streak to reach National Finals!`}
                 </Text>
               </View>
             </View>

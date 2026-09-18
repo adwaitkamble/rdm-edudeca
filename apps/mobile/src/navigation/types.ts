@@ -16,6 +16,9 @@ export type DashboardStackParamList = {
     accuracy: number;
     leveledUp?: boolean;
     newLevel?: number;
+    passed?: boolean;
+    strikes?: number;
+    level?: number;
   };
   Refer: undefined;
   LevelPath: undefined;

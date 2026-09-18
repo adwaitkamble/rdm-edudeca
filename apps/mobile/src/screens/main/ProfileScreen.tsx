@@ -18,7 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DashboardStackParamList } from '../../navigation/types';
 import { colors, typography, borderRadius, spacing, Button, Card } from '@edudeca/ui';
 import { useAppStore } from '../../store/useAppStore';
-import { userService } from '../../services';
+import { userService, edudecaApi } from '../../services';
 import { supabase } from '../../lib/supabase';
 import {
   ArrowLeft,
@@ -133,6 +133,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
       // Sync to Supabase backend database
       await userService.updateUserProfile(updatedData, user?.id);
+
+      // Inform live website API via PATCH /api/progress
+      try {
+        await edudecaApi.patchProgress({
+          class_level: editGrade === 'Class 12' ? 12 : 11,
+          track: editTrack === 'A' ? 'math' : 'bio',
+        });
+      } catch (_apiErr) {
+        // Safe notification
+      }
+
       setEditModalVisible(false);
       Alert.alert('Success', 'Profile updated successfully! 🎉');
     } catch (err: any) {

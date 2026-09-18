@@ -38,67 +38,136 @@ const DISCIPLINE_MAP: Record<string, { tag: DisciplineTag; color: AccentColorKey
 
 /**
  * Maps server challenge questions to the mobile app's Question format.
+ * Robustly parses question text across different backend key conventions (question, question_text, prompt, q, etc.)
  */
 const mapServerQuestion = (sq: ChallengeQuestion): Question => {
-  const key = (sq.discipline || '').toLowerCase().trim();
+  const key = (sq.discipline || sq.tag || sq.subject || '').toLowerCase().trim();
   const mapping = DISCIPLINE_MAP[key] || { tag: 'PHYSICS', color: 'teal' };
+
+  // Robust question text extraction
+  let questionPrompt = '';
+  if (typeof sq.question === 'string' && sq.question.trim().length > 0) {
+    questionPrompt = sq.question.trim();
+  } else if (typeof sq.question_text === 'string' && sq.question_text.trim().length > 0) {
+    questionPrompt = sq.question_text.trim();
+  } else if (typeof sq.questionText === 'string' && sq.questionText.trim().length > 0) {
+    questionPrompt = sq.questionText.trim();
+  } else if (typeof sq.prompt === 'string' && sq.prompt.trim().length > 0) {
+    questionPrompt = sq.prompt.trim();
+  } else if (typeof sq.text === 'string' && sq.text.trim().length > 0) {
+    questionPrompt = sq.text.trim();
+  } else if (typeof sq.q === 'string' && sq.q.trim().length > 0) {
+    questionPrompt = sq.q.trim();
+  } else if (typeof sq.title === 'string' && sq.title.trim().length > 0) {
+    questionPrompt = sq.title.trim();
+  } else if (typeof sq.statement === 'string' && sq.statement.trim().length > 0) {
+    questionPrompt = sq.statement.trim();
+  } else if (typeof sq.problem === 'string' && sq.problem.trim().length > 0) {
+    questionPrompt = sq.problem.trim();
+  } else if (typeof sq.content === 'string' && sq.content.trim().length > 0) {
+    questionPrompt = sq.content.trim();
+  } else if (sq.question && typeof sq.question === 'object') {
+    questionPrompt =
+      (sq.question as any).text ||
+      (sq.question as any).prompt ||
+      (sq.question as any).title ||
+      (sq.question as any).q ||
+      '';
+  }
+
+  // Robust options extraction
+  let options: string[] = [];
+  if (Array.isArray(sq.options)) {
+    options = sq.options.map((opt: any) =>
+      typeof opt === 'string'
+        ? opt
+        : opt?.text || opt?.option || opt?.value || opt?.title || String(opt)
+    );
+  } else if (Array.isArray(sq.o)) {
+    options = sq.o.map((opt: any) =>
+      typeof opt === 'string'
+        ? opt
+        : opt?.text || opt?.option || opt?.value || opt?.title || String(opt)
+    );
+  } else if (typeof sq.options === 'string') {
+    try {
+      const parsed = JSON.parse(sq.options);
+      if (Array.isArray(parsed)) {
+        options = parsed.map((opt: any) =>
+          typeof opt === 'string'
+            ? opt
+            : opt?.text || opt?.option || opt?.value || opt?.title || String(opt)
+        );
+      }
+    } catch {
+      options = (sq.options as string).split(',').map((s: string) => s.trim());
+    }
+  } else if (sq.option_a || sq.option_b || sq.option_c || sq.option_d) {
+    options = [sq.option_a, sq.option_b, sq.option_c, sq.option_d].filter(Boolean);
+  } else if (sq.option1 || sq.option2 || sq.option3 || sq.option4) {
+    options = [sq.option1, sq.option2, sq.option3, sq.option4].filter(Boolean);
+  }
+
+  // Robust correctIndex extraction
+  let correctIndex = 0;
+  if (typeof sq.correct_index === 'number') {
+    correctIndex = sq.correct_index;
+  } else if (typeof sq.correctIndex === 'number') {
+    correctIndex = sq.correctIndex;
+  } else if (typeof sq.c === 'number') {
+    correctIndex = sq.c;
+  } else if (typeof sq.answer === 'number') {
+    correctIndex = sq.answer;
+  } else if (typeof sq.correct_answer === 'number') {
+    correctIndex = sq.correct_answer;
+  } else if (typeof sq.correct_option === 'string') {
+    const letterMap: Record<string, number> = { a: 0, b: 1, c: 2, d: 3 };
+    const optLower = sq.correct_option.toLowerCase().trim();
+    if (letterMap[optLower] !== undefined) {
+      correctIndex = letterMap[optLower];
+    } else {
+      const idx = options.indexOf(sq.correct_option);
+      if (idx !== -1) correctIndex = idx;
+    }
+  } else if (typeof sq.correct_answer === 'string') {
+    const letterMap: Record<string, number> = { a: 0, b: 1, c: 2, d: 3 };
+    const optLower = sq.correct_answer.toLowerCase().trim();
+    if (letterMap[optLower] !== undefined) {
+      correctIndex = letterMap[optLower];
+    } else {
+      const idx = options.indexOf(sq.correct_answer);
+      if (idx !== -1) correctIndex = idx;
+    }
+  }
+
   return {
-    tag: mapping.tag,
-    color: mapping.color,
-    q: sq.question,
-    options: sq.options,
-    correctIndex: sq.correct_index,
+    tag: (sq.tag as DisciplineTag) || mapping.tag,
+    color: (sq.color as AccentColorKey) || mapping.color,
+    q: questionPrompt,
+    options,
+    correctIndex,
   };
 };
 
 export const quizService = {
   /**
-   * Fetches challenge questions for a round:
-   * 1. Tries Supabase table `edudeca_discipline_questions`
-   * 2. Tries EduDeca API if available
-   * 3. Falls back to curated QUESTION_BANK (ensuring rounds always work offline/guest)
+   * Fetches challenge questions for the current level:
+   * Strictly loads from GET /api/challenge/questions?level={level}
+   * Do not invent a local question picker. Do not touch mock tables.
    */
   fetchChallengeQuestions: async (level: number): Promise<Question[]> => {
-    // 1. Try Supabase edudeca_discipline_questions table
-    try {
-      const { data, error } = await supabase
-        .from('edudeca_discipline_questions')
-        .select('*')
-        .limit(30);
+    const response = await edudecaApi.getChallengeQuestions(level);
+    const questions =
+      response?.questions ||
+      (response as any)?.data ||
+      (response as any)?.results ||
+      (Array.isArray(response) ? response : []);
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((row: any) => ({
-          tag: (DISCIPLINE_MAP[row.discipline?.toLowerCase()]?.tag as any) || 'PHYSICS',
-          color: DISCIPLINE_MAP[row.discipline?.toLowerCase()]?.color || 'teal',
-          q: row.question || row.q,
-          options: row.options || row.o || [],
-          correctIndex: row.correct_index ?? row.correctIndex ?? 0,
-        }));
-      }
-    } catch (_e) {
-      // Ignore
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new Error('No questions returned from live EduDeca API for this level.');
     }
-
-    // 2. Try website API
-    try {
-      const response = await edudecaApi.getChallengeQuestions(level);
-      const questions = response.questions || (response as any) || [];
-      if (Array.isArray(questions) && questions.length > 0) {
-        return questions.map(mapServerQuestion);
-      }
-    } catch (_e) {
-      // Ignore
-    }
-
-    // 3. Fallback to rich curated local QUESTION_BANK
-    // Guaranteed to load immediately without failing on offline/unauthenticated tests
-    return QUESTION_BANK.map((q) => ({
-      tag: q.tag,
-      color: q.color,
-      q: q.q,
-      options: q.o,
-      correctIndex: q.c,
-    }));
+    console.log('[QuizService] Loaded raw questions count:', questions.length, 'Sample raw item:', questions[0]);
+    return questions.map(mapServerQuestion);
   },
 
   /**
@@ -113,45 +182,27 @@ export const quizService = {
   },
 
   /**
-   * Submits completed quiz attempt via the website API or directly to Supabase.
+   * Submits completed quiz attempt strictly via POST /api/challenge/complete
    */
   submitQuizAttempt: async (
     payload: QuizSubmissionPayload,
     _userId?: string
   ): Promise<QuizSubmissionResponse> => {
     const totalQ = payload.total || payload.totalQuestions || 10;
-    let result: any = null;
+    const strikes = payload.strikes ?? Math.max(0, totalQ - payload.score);
+    const passed = payload.passed ?? (strikes < 3);
 
-    // Try website API
-    try {
-      result = await edudecaApi.completeChallenge({
-        level: payload.level,
-        score: payload.score,
-        total: totalQ,
-        timeTaken: payload.timeTaken,
-      });
-    } catch (_err) {
-      // Fallback: save to edudeca_daily_attempts in Supabase if authenticated
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const uid = sessionData.session?.user?.id || payload.userId;
-        if (uid) {
-          await supabase.from('edudeca_daily_attempts').insert({
-            user_id: uid,
-            campaign_level: payload.level,
-            score: payload.score,
-            total_questions: totalQ,
-            accuracy: payload.accuracy,
-            time_taken_seconds: payload.timeTaken,
-            xp_earned: payload.earnedRdm,
-          });
-        }
-      } catch (_subErr) {
-        // Safe ignore
-      }
-    }
+    // Live website API challenge complete call
+    const result = await edudecaApi.completeChallenge({
+      level: payload.level,
+      score: payload.score,
+      total: totalQ,
+      strikes,
+      passed,
+      timeTaken: payload.timeTaken,
+    });
 
-    const newLevel = result?.new_level ?? (payload.passed ? payload.level + 1 : payload.level);
+    const newLevel = result?.new_level ?? (passed ? payload.level + 1 : payload.level);
     const attempt: IQuizAttempt = {
       id: result?.attempt_id || String(Date.now()),
       userId: payload.userId || '',
@@ -162,7 +213,7 @@ export const quizService = {
       accuracy: payload.accuracy || Math.round((payload.score / totalQ) * 100),
       timeTaken: payload.timeTaken,
       earnedRdm: result?.xp_earned ?? (payload.earnedRdm || 0),
-      passed: payload.passed ?? (payload.score >= totalQ * 0.7),
+      passed,
       completedAt: new Date().toISOString(),
     };
 
@@ -170,7 +221,7 @@ export const quizService = {
       success: true,
       attempt,
       user: {} as any,
-      leveledUp: result?.leveled_up ?? (payload.passed && payload.level >= 1),
+      leveledUp: result?.leveled_up ?? (passed && payload.level >= 1),
       newLevel,
     };
   },

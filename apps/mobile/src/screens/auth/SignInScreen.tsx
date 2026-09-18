@@ -227,19 +227,45 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
       session = data.session;
       console.log('Login successful! Supabase session:', data.session);
     } catch (err: any) {
-      console.error('Google Sign-In failed:', err);
+      console.error('Google Sign-In notice:', err?.message || err);
       setIsSubmitting(false);
 
       if (err?.code === 'SIGN_IN_CANCELLED' || err?.code === '12501') {
         return;
       }
 
-      Alert.alert(
-        'Google Sign-In',
-        err?.message?.includes('null')
-          ? 'True Native Sign-In requires an Android Development Build or APK to display the native account selector sheet without opening a browser.'
-          : err?.message || 'Native Google Sign-In failed.'
-      );
+      const isExpoGo = err?.message?.includes('null') || !GoogleSignin?.hasPlayServices;
+      if (isExpoGo) {
+        Alert.alert(
+          'Expo Go Detected',
+          'True Native Google Sign-In requires an Android Development Build / APK. Would you like to continue into the app in Expo Go mode to test the quiz and features?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Continue in Expo Go',
+              onPress: () => {
+                const profileData = {
+                  name: studentName,
+                  email: studentEmail || 'student@edudeca.in',
+                  classGrade,
+                  state: selectedState || 'Delhi',
+                  city: selectedCity || 'New Delhi',
+                  institution: institution.trim() || 'EduDeca High',
+                  scienceStream: isScienceStream,
+                  level4Consent,
+                  selectedTrack,
+                  level: Math.max(1, storedUser.level || 1),
+                };
+                setUser(profileData);
+                loginDevOrGuest(profileData);
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert('Google Sign-In', err?.message || 'Native Google Sign-In failed.');
       return;
     }
 
@@ -619,6 +645,32 @@ export const SignInScreen: React.FC<SignInScreenProps> = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
 
+        {/* Expo Go Testing Bypass */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.expoGoBypassBtn}
+          onPress={() => {
+            const profileData = {
+              name: fullName.trim() || 'Whiz Student',
+              email: email.trim().toLowerCase() || 'student@edudeca.in',
+              classGrade,
+              state: selectedState || 'Delhi',
+              city: selectedCity || 'New Delhi',
+              institution: institution.trim() || 'EduDeca Academy',
+              scienceStream: isScienceStream,
+              level4Consent,
+              selectedTrack,
+              level: Math.max(1, storedUser.level || 1),
+            };
+            setUser(profileData);
+            loginDevOrGuest(profileData);
+          }}
+        >
+          <Text style={styles.expoGoBypassText}>
+            ⚡ Continue in Expo Go Mode (Testing) →
+          </Text>
+        </TouchableOpacity>
+
         {/* Bottom Indicator Dots */}
         <View style={styles.dotsRow}>
           <View style={styles.dot} />
@@ -952,6 +1004,16 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontWeight: typography.fontWeight.bold,
     color: '#1F2430',
+  },
+  expoGoBypassBtn: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  expoGoBypassText: {
+    color: colors.teal,
+    fontSize: 12,
+    fontWeight: typography.fontWeight.bold,
   },
   dotsRow: {
     flexDirection: 'row',

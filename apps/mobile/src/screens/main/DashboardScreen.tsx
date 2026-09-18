@@ -160,10 +160,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
             </View>
           </View>
 
-          {/* Quick Action Button in Level Card - Starts 10Q challenge immediately */}
+          {/* Quick Action Button in Level Card - Starts daily challenge for campaign_level */}
           <TouchableOpacity
             activeOpacity={0.85}
-            style={styles.startLevelBtn}
+            style={[
+              styles.startLevelBtn,
+              level >= 4 && { backgroundColor: 'rgba(240,180,41,0.2)', borderWidth: 1.5, borderColor: colors.gold },
+            ]}
             onPress={() =>
               navigation.navigate('Quiz', {
                 quizLength: 10,
@@ -171,8 +174,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) 
               })
             }
           >
-            <Text style={styles.startLevelBtnText}>
-              ⚡ Start Level {Math.max(1, level)} Challenge →
+            <Text
+              style={[
+                styles.startLevelBtnText,
+                level >= 4 && { color: colors.gold },
+              ]}
+            >
+              {level >= 4
+                ? '🔒 Free Zone Conquered · Level 4 Priority Gate →'
+                : `⚡ Start Level ${Math.max(1, level)} Daily Challenge →`}
             </Text>
           </TouchableOpacity>
         </View>

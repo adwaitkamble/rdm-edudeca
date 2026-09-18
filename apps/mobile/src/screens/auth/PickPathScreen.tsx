@@ -13,6 +13,8 @@ import { colors, typography, borderRadius, spacing, Button, Card, Pill } from '@
 import { useAppStore } from '../../store/useAppStore';
 import { ArrowLeft } from 'lucide-react-native';
 
+import { edudecaApi } from '../../services/edudecaApi';
+
 type PickPathScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'PickPath'>;
 
 interface PickPathScreenProps {
@@ -20,20 +22,45 @@ interface PickPathScreenProps {
 }
 
 export const PickPathScreen: React.FC<PickPathScreenProps> = ({ navigation }) => {
+  const user = useAppStore((state) => state.user);
+  const setUser = useAppStore((state) => state.setUser);
   const selectedTrack = useAppStore((state) => state.selectedTrack);
   const setSelectedTrack = useAppStore((state) => state.setSelectedTrack);
   const isGuestOrDevAuthenticated = useAppStore(
     (state) => state.isGuestOrDevAuthenticated
   );
   const [localTrack, setLocalTrack] = useState<'A' | 'B'>(selectedTrack || 'A');
+  const [localGrade, setLocalGrade] = useState<'Class 11' | 'Class 12'>(
+    user.classGrade === 'Class 12' ? 'Class 12' : 'Class 11'
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSelectTrack = (track: 'A' | 'B') => {
     setLocalTrack(track);
     setSelectedTrack(track);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     setSelectedTrack(localTrack);
+    setUser({ classGrade: localGrade });
+
+    const disciplines = localTrack === 'A'
+      ? ['Physics', 'Chemistry', 'Verbal', 'Quantitative', 'Analytical', 'GK', 'FinLit', 'Entrepreneurship', 'Mathematics', 'Applied Mathematics']
+      : ['Physics', 'Chemistry', 'Verbal', 'Quantitative', 'Analytical', 'GK', 'FinLit', 'Entrepreneurship', 'Biology', 'Biotechnology'];
+
+    setIsSubmitting(true);
+    try {
+      await edudecaApi.patchProgress({
+        track: localTrack === 'A' ? 'math' : 'bio',
+        class_level: localGrade === 'Class 12' ? 12 : 11,
+        disciplines,
+      });
+    } catch (err: any) {
+      console.log('[PickPath] patchProgress notification:', err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+
     if (isGuestOrDevAuthenticated) {
       if (navigation?.canGoBack?.()) {
         navigation.goBack();
@@ -80,6 +107,61 @@ export const PickPathScreen: React.FC<PickPathScreenProps> = ({ navigation }) =>
 
         {/* Gradient Progress Bar */}
         <View style={styles.progressBar} />
+
+        {/* Card: Class Level Selection (11 or 12) */}
+        <Card style={styles.gradeCard}>
+          <Text style={styles.gradeHeader}>CLASS LEVEL · ELIGIBILITY REQUIREMENT</Text>
+          <Text style={styles.gradeSub}>
+            Daily Challenge is open for Senior Secondary students (Class 11 &amp; 12)
+          </Text>
+          <View style={styles.gradeRow}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[
+                styles.gradeBtn,
+                localGrade === 'Class 11' && styles.gradeBtnActive,
+              ]}
+              onPress={() => setLocalGrade('Class 11')}
+            >
+              <Text
+                style={[
+                  styles.gradeBtnText,
+                  localGrade === 'Class 11' && styles.gradeBtnTextActive,
+                ]}
+              >
+                Class 11
+              </Text>
+              {localGrade === 'Class 11' && (
+                <View style={styles.gradeCheckBadge}>
+                  <Text style={styles.gradeCheckText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[
+                styles.gradeBtn,
+                localGrade === 'Class 12' && styles.gradeBtnActive,
+              ]}
+              onPress={() => setLocalGrade('Class 12')}
+            >
+              <Text
+                style={[
+                  styles.gradeBtnText,
+                  localGrade === 'Class 12' && styles.gradeBtnTextActive,
+                ]}
+              >
+                Class 12
+              </Text>
+              {localGrade === 'Class 12' && (
+                <View style={styles.gradeCheckBadge}>
+                  <Text style={styles.gradeCheckText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Card>
 
         {/* Card: Locked 8 Core Subjects */}
         <Card style={styles.lockedCard}>
@@ -643,5 +725,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+  },
+  gradeCard: {
+    padding: spacing.base,
+    marginBottom: 14,
+  },
+  gradeHeader: {
+    fontSize: 10.5,
+    fontWeight: typography.fontWeight.extrabold,
+    letterSpacing: 0.6,
+    color: colors.gold,
+    marginBottom: 4,
+  },
+  gradeSub: {
+    fontSize: 11.5,
+    color: colors.muted,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  gradeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  gradeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.card2,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  gradeBtnActive: {
+    backgroundColor: 'rgba(34,211,166,0.12)',
+    borderColor: colors.teal,
+  },
+  gradeBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.muted,
+  },
+  gradeBtnTextActive: {
+    color: colors.teal,
+    fontWeight: typography.fontWeight.extrabold,
+  },
+  gradeCheckBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gradeCheckText: {
+    color: '#04140E',
+    fontSize: 10,
+    fontWeight: typography.fontWeight.extrabold,
   },
 });

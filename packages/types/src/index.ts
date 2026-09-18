@@ -141,6 +141,7 @@ export interface QuizSubmissionPayload {
   score: number;
   total?: number;
   totalQuestions?: number;
+  strikes?: number;
   accuracy?: number;
   timeTaken: number;
   earnedRdm?: number;
